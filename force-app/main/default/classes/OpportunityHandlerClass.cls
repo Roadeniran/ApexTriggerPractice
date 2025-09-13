@@ -39,4 +39,51 @@ public with sharing class OpportunityHandlerClass {
             }
         }
     }
+
+    // This method As soon as an Opportunity is deleted, create a Task for the Opportunity’s parent Account Owner.
+    public static void createTaskForAccountOwner(List<Opportunity> Opportunities, Map<Id,Opportunity> oldMap){
+        if (Opportunities == null || Opportunities.isEmpty()) {
+            return; // Exit if the list is null or empty
+        }
+        
+        // collect accountIds from opportunities, create a set to collect Ids
+        Set<Id> accountIds = new Set<Id>();
+
+    // Collect AccountIds safely
+    for (Opportunity opp : opportunities) {
+        Opportunity oldOpp = oldMap.get(opp.Id);
+        if (oldOpp != null && oldOpp.AccountId != null) {
+            accountIds.add(oldOpp.AccountId);
+        }
+    }
+
+    // Query Account Owners, Get OwnerId for Account collected in accountIds
+    Map<Id, Account> accountMap = new Map<Id, Account>(
+        [SELECT Id, OwnerId FROM Account WHERE Id IN :accountIds]
+    );
+
+    List<Task> tasksToInsert = new List<Task>();// List to collet tasks to be created
+
+        // loop through opportunities incase we have more than one opportunity to one account
+    for (Opportunity opp : opportunities) {
+        // since opportunity is deleted, we use oldMap to get the account Id
+            Opportunity oldOpp = oldMap.get(opp.Id);
+            if (oldOpp != null && oldOpp.AccountId != null) {
+                Account acc = accountMap.get(oldOpp.AccountId);
+                if (acc != null) {
+                    Task tsk = new Task();
+                    tsk.Subject = 'Opportunity Deleted - '+ oldOpp.Name ;
+                    tsk.WhatId = oldOpp.AccountId;
+                    tsk.OwnerId = acc.OwnerId;
+                    tsk.Priority = 'Normal';
+                    tsk.Status = 'Not Started';
+                    tasksToInsert.add(tsk);
+                }
+            }
+        }
+
+        if (!tasksToInsert.isEmpty()) {
+            insert tasksToInsert;
+        }
+    }
 }
